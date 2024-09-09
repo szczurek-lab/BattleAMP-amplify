@@ -8,8 +8,9 @@ import argparse
 
 
 def process_file(filepath: str, output_filename: str):
-    df = pd.read_csv(filepath, delimiter=",")
+    df = pd.read_csv(filepath, delimiter="\t")
     df.rename(columns={"Sequence": "sequence"}, inplace=True)
+    print(f"columns were renamed to {df.columns}")
     df.to_csv(output_filename, sep="\t", index=False)
 
 
