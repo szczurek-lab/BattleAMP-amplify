@@ -7,7 +7,7 @@ This script is for generating prediction results for test sequences
 
 @author: Chenkai Li
 """
-
+import os
 import argparse
 import sys
 from textwrap import dedent
@@ -291,7 +291,7 @@ def main():
         else:
             # if os.path.isfile(out_name):
             #     print('\nUnable to save! File already existed!')
-            else:
+            # else:
                 out = pd.DataFrame({'Sequence_ID':seq_id,
                                     'Sequence': peptide,
                                     'Length': y_length,
