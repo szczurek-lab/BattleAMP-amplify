@@ -1,9 +1,23 @@
-# Amplify Fork for classifiers evaluation tasks
+# AMPlify
 
-remember to clone **recursively** or init submodules after cloning
+## Supported tasks
+AMP classification
 
-please read `experiments_tools/README.md`
+## Installation
 
+```
+conda create -n amplify python=3.9
+conda activate amplify
+pip install -r requirements.txt
+```
+
+## BattleAMP benchmark
+
+1. Create conda environment. Refer to [installation](#Installation) section.
+2. Run `inference.sh` script using corresponding inference model name. Example for running classification:
+```shell
+sh inference.sh input.fasta output.tsv classification
+```
 
 # Base repo Readme
 

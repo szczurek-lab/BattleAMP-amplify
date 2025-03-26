@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Sep 27 13:11:00 2019
+Created on Fri Sep 27 13:11:00 19
 
 Script for Multi-Head Scaled Dot-Product Attention and Context Attention layers
 
@@ -9,8 +9,10 @@ Script for Multi-Head Scaled Dot-Product Attention and Context Attention layers
 """
 
 from keras import backend as K
+import keras.src.legacy.backend as legacy_backend
 from keras import initializers, regularizers, constraints, activations
 from keras.layers import Layer
+import tensorflow as tf
 
 
 class Attention(Layer):
@@ -131,25 +133,25 @@ class Attention(Layer):
 
     def call(self, x, mask=None):        
         # U = tanh(H*W + b) (eq. 8)        
-        ui = K.dot(x, self.W)              # (b, t, a)
+        ui = legacy_backend.dot(x, self.W)              # (b, t, a)
         if self.b is not None:
             ui += self.b
         ui = self.activation(ui)           # (b, t, a)
 
         # Z = U * us (eq. 9)
-        us = K.expand_dims(self.context)   # (a, 1)
-        ui_us = K.dot(ui, us)              # (b, t, a) * (a, 1) = (b, t, 1)
-        ui_us = K.squeeze(ui_us, axis=-1)  # (b, t, 1) -> (b, t)
+        us = tf.expand_dims(self.context, axis=-1)   # (a, 1)
+        ui_us = legacy_backend.dot(ui, us)              # (b, t, a) * (a, 1) = (b, t, 1)
+        ui_us = legacy_backend.squeeze(ui_us, axis=-1)  # (b, t, 1) -> (b, t)
         
         # alpha = softmax(Z) (eq. 9)
         alpha = self._masked_softmax(ui_us, mask) # (b, t)
-        alpha = K.expand_dims(alpha, axis=-1)     # (b, t, 1)
+        alpha = tf.expand_dims(alpha, axis=-1)     # (b, t, 1)
         
         if self.return_attention:
             return alpha
         else:
             # v = alpha_i * x_i (eq. 10)
-            return K.sum(x * alpha, axis=1)
+            return legacy_backend.sum(x * alpha, axis=1)
     
     def _masked_softmax(self, logits, mask):
         """Keras's default implementation of softmax doesn't allow masking, while
@@ -160,21 +162,21 @@ class Attention(Layer):
         #    s_i = exp(xi - b) / exp(xj - b)
         #    return s
         
-        b = K.max(logits, axis=-1, keepdims=True)
+        b = legacy_backend.max(logits, axis=-1, keepdims=True)
         logits = logits - b
 
-        exped = K.exp(logits)
+        exped = legacy_backend.exp(logits)
 
         # ignoring masked inputs
         if mask is not None:
-            mask = K.cast(mask, K.floatx())
+            mask = legacy_backend.cast(mask, K.floatx())
             exped *= mask
 
-        partition = K.sum(exped, axis=-1, keepdims=True)
+        partition = legacy_backend.sum(exped, axis=-1, keepdims=True)
 
         # if all timesteps are masked, the partition will be zero. To avoid this
         # issue we use the following trick:
-        partition = K.maximum(partition, K.epsilon())
+        partition = legacy_backend.maximum(partition, K.epsilon())
 
         return exped / partition
 
@@ -275,18 +277,18 @@ class ScaledDotProductAttention(Layer):
             query = key = value = inputs
         if isinstance(mask, list):
             mask = mask[1]
-        feature_dim = K.shape(query)[-1]
-        e = K.batch_dot(query, key, axes=2) / K.sqrt(K.cast(feature_dim, dtype=K.floatx()))
-        e = K.exp(e - K.max(e, axis=-1, keepdims=True))
+        feature_dim = tf.shape(query)[-1]
+        e = legacy_backend.batch_dot(query, key, axes=2) / legacy_backend.sqrt(legacy_backend.cast(feature_dim, dtype=K.floatx()))
+        e = legacy_backend.exp(e - legacy_backend.max(e, axis=-1, keepdims=True))
         if self.history_only:
-            query_len, key_len = K.shape(query)[1], K.shape(key)[1]
-            indices = K.expand_dims(K.arange(0, key_len), axis=0)
-            upper = K.expand_dims(K.arange(0, query_len), axis=-1)
-            e *= K.expand_dims(K.cast(indices <= upper, K.floatx()), axis=0)
+            query_len, key_len = tf.shape(query)[1], tf.shape(key)[1]
+            indices = tf.expand_dims(K.arange(0, key_len), axis=0)
+            upper = tf.expand_dims(K.arange(0, query_len), axis=-1)
+            e *= tf.expand_dims(legacy_backend.cast(indices <= upper, K.floatx()), axis=0)
         if mask is not None:
-            e *= K.cast(K.expand_dims(mask, axis=-2), K.floatx())
-        a = e / (K.sum(e, axis=-1, keepdims=True) + K.epsilon())
-        v = K.batch_dot(a, value)
+            e *= legacy_backend.cast(tf.expand_dims(mask, axis=-2), K.floatx())
+        a = e / (legacy_backend.sum(e, axis=-1, keepdims=True) + K.epsilon())
+        v = legacy_backend.batch_dot(a, value)
         if self.return_attention:
             return [v, a]
         return v
@@ -453,35 +455,35 @@ class MultiHeadAttention(Layer):
 
     @staticmethod
     def _reshape_to_batches(x, head_num):
-        input_shape = K.shape(x)
+        input_shape = tf.shape(x)
         batch_size, seq_len, feature_dim = input_shape[0], input_shape[1], input_shape[2]
         head_dim = feature_dim // head_num
-        x = K.reshape(x, (batch_size, seq_len, head_num, head_dim))
-        x = K.permute_dimensions(x, [0, 2, 1, 3])
-        return K.reshape(x, (batch_size * head_num, seq_len, head_dim))
+        x = tf.reshape(x, (batch_size, seq_len, head_num, head_dim))
+        x = tf.transpose(x, perm=[0, 2, 1, 3])
+        return tf.reshape(x, (batch_size * head_num, seq_len, head_dim))
 
     @staticmethod
     def _reshape_from_batches(x, head_num):
-        input_shape = K.shape(x)
+        input_shape = tf.shape(x)
         batch_size, seq_len, feature_dim = input_shape[0], input_shape[1], input_shape[2]
-        x = K.reshape(x, (batch_size // head_num, head_num, seq_len, feature_dim))
-        x = K.permute_dimensions(x, [0, 2, 1, 3])
-        return K.reshape(x, (batch_size // head_num, seq_len, feature_dim * head_num))
+        x = tf.reshape(x, (batch_size // head_num, head_num, seq_len, feature_dim))
+        x = tf.transpose(x, perm=[0, 2, 1, 3])
+        return tf.reshape(x, (batch_size // head_num, seq_len, feature_dim * head_num))
     
     @staticmethod
     def _reshape_attention_from_batches(x, head_num):
-        input_shape = K.shape(x)
+        input_shape = tf.shape(x)
         batch_size, seq_len = input_shape[0], input_shape[1]
-        return K.reshape(x, (batch_size // head_num, head_num, seq_len, seq_len))
+        return tf.reshape(x, (batch_size // head_num, head_num, seq_len, seq_len))
 
     @staticmethod
     def _reshape_mask(mask, head_num):
         if mask is None:
             return mask
-        seq_len = K.shape(mask)[1]
-        mask = K.expand_dims(mask, axis=1)
-        mask = K.tile(mask, [1, head_num, 1])
-        return K.reshape(mask, (-1, seq_len))
+        seq_len = tf.shape(mask)[1]
+        mask = tf.expand_dims(mask, axis=1)
+        mask = tf.tile(mask, [1, head_num, 1])
+        return tf.reshape(mask, (-1, seq_len))
 
     def call(self, inputs, mask=None):
         if isinstance(inputs, list):
@@ -492,9 +494,9 @@ class MultiHeadAttention(Layer):
             q_mask, k_mask, v_mask = mask
         else:
             q_mask = k_mask = v_mask = mask
-        q = K.dot(q, self.Wq)
-        k = K.dot(k, self.Wk)
-        v = K.dot(v, self.Wv)
+        q = legacy_backend.dot(q, self.Wq)
+        k = legacy_backend.dot(k, self.Wk)
+        v = legacy_backend.dot(v, self.Wv)
         if self.use_bias:
             q += self.bq
             k += self.bk
@@ -522,7 +524,7 @@ class MultiHeadAttention(Layer):
         
         y = self._reshape_from_batches(y, self.head_num)
         a = self._reshape_attention_from_batches(a, self.head_num)
-        y = K.dot(y, self.Wo)
+        y = legacy_backend.dot(y, self.Wo)
         if self.use_bias:
             y += self.bo
         if self.activation is not None:
@@ -534,7 +536,7 @@ class MultiHeadAttention(Layer):
             output_shape = self.compute_output_shape(input_shape)
             if output_shape[1] is not None:
                 output_shape = (-1,) + output_shape[1:]
-                y = K.reshape(y, output_shape)
+                y = tf.reshape(y, output_shape)
         '''
         if self.return_multi_attention:
             return a

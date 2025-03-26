@@ -8,8 +8,6 @@ This script is for generating prediction results for test sequences
 @author: Chenkai Li
 """
 
-
-import os
 import argparse
 import sys
 from textwrap import dedent
@@ -67,8 +65,8 @@ def build_attention():
     """
     Build the model architecture for attention output
     """
-    inputs = Input(shape=(MAX_LEN, 20), name='Input')
-    masking = Masking(mask_value=0.0, input_shape=(MAX_LEN, 20), name='Masking')(inputs)
+    inputs = Input(shape=(MAX_LEN, 100), name='Input')
+    masking = Masking(mask_value=0.0, input_shape=(MAX_LEN, 100), name='Masking')(inputs)
     hidden = Bidirectional(LSTM(512, use_bias=True, dropout=0.5, return_sequences=True), name='Bidirectional-LSTM')(masking)
     hidden = MultiHeadAttention(head_num=32, activation='relu', use_bias=True, 
                                 return_multi_attention=False, name='Multi-Head-Attention')(hidden)
@@ -274,7 +272,7 @@ def main():
         if args.attention == 'on':
             temp_txt = temp_txt+'Attention: '+str(attention[i])+'\n'
         temp_txt = temp_txt+'\n'
-        print(temp_txt)
+        # print(temp_txt)
         out_txt = out_txt + temp_txt
 
     # save to tsv or xlsx
@@ -291,8 +289,8 @@ def main():
                 out.close()
                 print('\nResults saved as: ' + out_name)
         else:
-            if os.path.isfile(out_name):
-                print('\nUnable to save! File already existed!')
+            # if os.path.isfile(out_name):
+            #     print('\nUnable to save! File already existed!')
             else:
                 out = pd.DataFrame({'Sequence_ID':seq_id,
                                     'Sequence': peptide,
