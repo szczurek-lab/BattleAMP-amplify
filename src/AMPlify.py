@@ -8,6 +8,15 @@ This script is for generating prediction results for test sequences
 @author: Chenkai Li
 """
 import os
+import tensorflow as tf
+import tensorflow_io as tfio
+gpus = tf.config.experimental.list_physical_devices('GPU')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
+config = tf.compat.v1.ConfigProto()
+config.gpu_options.allow_growth = True
+session = tf.compat.v1.Session(config=config)
+os.environ["TF_GPU_ALLOCATOR"] = "cuda_malloc_async"
 import argparse
 import sys
 from textwrap import dedent
@@ -95,9 +104,10 @@ def ensemble(model_list, X):
     Ensemble the list of models with processed input X, 
     Return results for ensemble and individual models
     """
+    X = tfio.experimental.IODataset.from_numpy(X).batch(8)
     indv_pred = [] # list of predictions from each individual model
     for i in range(len(model_list)):
-        indv_pred.append(model_list[i].predict(X).flatten())
+        indv_pred.append(model_list[i].predict(X, batch_size=8, verbose=1).flatten())
     ens_pred = np.mean(np.array(indv_pred), axis=0)
     return ens_pred, np.array(indv_pred)
 
