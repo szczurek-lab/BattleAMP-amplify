@@ -16,7 +16,7 @@ pip install -r requirements.txt
 1. Create conda environment. Refer to [installation](#Installation) section.
 2. Run `inference.sh` script using corresponding inference model name. Example for running classification:
 ```shell
-sh inference.sh input.fasta output.tsv classification
+sh inference.sh sample.fasta results.tsv classification
 ```
 
 # Base repo Readme
