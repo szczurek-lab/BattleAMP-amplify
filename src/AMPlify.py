@@ -26,9 +26,23 @@ import pandas as pd
 from layers import Attention, MultiHeadAttention
 from keras.models import Model
 from keras.layers import Masking, Dense, LSTM, Bidirectional, Input, Dropout
+from keras.utils import Sequence
 
 
 MAX_LEN = 200 # max length for input sequences
+
+class DataGenerator(Sequence):
+    def __init__(self, x_set, batch_size):
+        self.x = x_set
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return int(np.ceil(len(self.x) / float(self.batch_size)))
+
+    def __getitem__(self, idx):
+        batch_x = self.x[idx * self.batch_size:(idx + 1) * self.batch_size]
+        return batch_x
+
 
 
 def one_hot_padding(seq_list,padding):
@@ -104,8 +118,9 @@ def ensemble(model_list, X):
     Return results for ensemble and individual models
     """
     indv_pred = [] # list of predictions from each individual model
+    X_gen = DataGenerator(X, 512)
     for i in range(len(model_list)):
-        indv_pred.append(model_list[i].predict(X, batch_size=256, verbose=1).flatten())
+        indv_pred.append(model_list[i].predict(X_gen, verbose=1).flatten())
     ens_pred = np.mean(np.array(indv_pred), axis=0)
     return ens_pred, np.array(indv_pred)
 
