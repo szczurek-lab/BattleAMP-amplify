@@ -1,0 +1,13 @@
+name: amplify
+version: 2.0.0
+type: classifier
+framework: tensorflow
+description: >
+  AMPlify: attentive deep learning model for AMP prediction.
+  Bidirectional LSTM with multi-head attention, ensemble of 5 models.
+  One-hot encoding of amino acid sequences.
+paper: "https://doi.org/10.1186/s12859-022-04577-y"
+source_repo: "https://github.com/bcgsc/AMPlify"
+length_min: 2
+length_max: 200
+gpu_required: true
