@@ -1,2 +1,10 @@
+adapters
+benchmarks
 .idea
+*.log
+logs
+*.pyc
+__pycache__
 __pycache__/
+results
+.snakemake

@@ -1,18 +1,41 @@
-# BattleAMP-amplify
+# AMPlify
 
-Fork of [AMPlify](https://github.com/bcgsc/AMPlify) (Li et al., 2022) adapted for the [BattleAMP benchmark pipeline](https://github.com/szczurek-lab/battleamp-snakemake).
+Fork of [bcgsc/AMPlify](https://github.com/bcgsc/AMPlify), adapted for integration with
+the [battleamp-snakemake](https://github.com/szczurek-lab/battleamp-snakemake) benchmarking
+pipeline.
 
-## What is AMPlify
+## Supported tasks
 
-AMPlify is an attentive deep learning model for antimicrobial peptide prediction. It uses an ensemble of five bidirectional LSTM networks with multi-head scaled dot-product attention and context attention layers. Input sequences are one-hot encoded (maximum length 200 residues). The final prediction is the mean probability across the five sub-models.
+AMP classification (binary: AMP / non-AMP).
 
-Original paper: Li et al. (2022). AMPlify: attentive deep learning model for discovery of novel antimicrobial peptides effective against WHO priority pathogens. *BMC Genomics*, 23(1), 77. https://doi.org/10.1186/s12859-022-04577-y
+## Reference
+
+Li, C., Sutherland, D., Hammond, S.A. et al. AMPlify: attentive deep learning model for discovery of novel antimicrobial peptides effective against WHO priority pathogens. BMC Genomics 23, 77 (2022). https://doi.org/10.1186/s12864-022-08310-4
+    
 
 ## Requirements
 
-- NVIDIA GPU with CUDA support
+- Python 3.10
 - conda (for environment creation by the pipeline)
-- Model weights in `models/balanced/` (5 files: `AMPlify_balanced_model_weights_{1..5}.h5`). These are not included in the repository due to size; obtain them from the original AMPlify release or contact the authors.
+- NVIDIA GPU (TensorFlow will fall back to CPU but inference is very slow)
+
+The model architecture (a 5-model ensemble of bidirectional LSTMs with attention) and
+the pretrained weights are unchanged. Python was upgraded from 3.6 to 3.10 and
+dependencies were updated accordingly (TensorFlow 2.x, compatible Keras, etc.)
+
+## Installation
+
+```bash
+conda create -n amplify python=3.10
+conda activate amplify
+sh setup.sh
+```
+
+Test whether everything works:
+
+```bash
+sh inference.sh sample.fasta results.tsv
+```
 
 ## Usage within the pipeline
 
@@ -20,14 +43,13 @@ This repository is included as a git submodule in battleamp-snakemake:
 
 ```bash
 cd battleamp-snakemake
-git submodule add git@github.com:szczurek-lab/BattleAMP-amplify.git models/amplify
+git submodule add git@github.com:szczurek-lab/BattleAMP-AMPlify.git models/amplify
 ```
 
-The pipeline handles environment creation, batched inference (splitting large FASTA files into chunks of 100k sequences), and evaluation automatically. No manual intervention is needed after the submodule is added and weights are in place.
+The pipeline handles environment creation, inference, and evaluation automatically.
+No manual intervention is needed after the submodule is added and weights are in place.
 
 ## Standalone usage
-
-To run AMPlify outside the pipeline:
 
 ```bash
 conda create -n amplify python=3.10
@@ -37,21 +59,19 @@ pip install -r requirements.txt
 python src/AMPlify.py -s input.fasta -on output.tsv
 ```
 
-Output columns: `Sequence_ID`, `Sequence`, `Length`, `Charge`, `Probability_score`, `AMPlify_log_scaled_score`, `Prediction`.
+Output columns: `Sequence_ID`, `Sequence`, `Length`, `Charge`, `Probability_score`,
+`AMPlify_log_scaled_score`, `Prediction`.
 
-## GPU troubleshooting
 
-TensorFlow installed via pip bundles its own NVIDIA libraries in `site-packages/nvidia/*/lib/`. If TensorFlow does not detect the GPU, these directories need to be on `LD_LIBRARY_PATH`. The `setup.sh` and `inference.sh` scripts handle this automatically. To set it manually:
 
-```bash
-export LD_LIBRARY_PATH=$(python3 -c "
-import os, nvidia
-base = os.path.dirname(nvidia.__file__)
-libs = [os.path.join(base, d, 'lib') for d in sorted(os.listdir(base))
-        if os.path.isdir(os.path.join(base, d, 'lib'))]
-print(':'.join(libs))
-"):$LD_LIBRARY_PATH
-```
+## Notes
+
+- AMPlify uses a 5-model ensemble. All weight files
+  (`models/balanced/AMPlify_balanced_model_weights_{1..5}.h5`) must be present.
+- The balanced model is used by default, suitable for curated candidate sets.
+  The imbalanced model (for large-scale screening with many non-AMPs) is also
+  available in `models/imbalanced/`.
+- Results for sequences with non-standard amino acids are returned as `NA`.
 
 ## License
 
