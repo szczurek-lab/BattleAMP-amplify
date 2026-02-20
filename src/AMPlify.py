@@ -9,6 +9,7 @@ This script is for generating prediction results for test sequences
 """
 import os
 import tensorflow as tf
+
 gpus = tf.config.experimental.list_physical_devices('GPU')
 for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True)
@@ -27,11 +28,10 @@ from layers import Attention, MultiHeadAttention
 from keras.models import Model
 from keras.layers import Masking, Dense, LSTM, Bidirectional, Input, Dropout
 
+MAX_LEN = 200  # max length for input sequences
 
-MAX_LEN = 200 # max length for input sequences
 
-
-def one_hot_padding(seq_list,padding):
+def one_hot_padding(seq_list, padding):
     """
     Generate features for aa sequences [one-hot encoding with zero padding].
     Input: seq_list: list of sequences, 
@@ -40,17 +40,17 @@ def one_hot_padding(seq_list,padding):
     """
     feat_list = []
     one_hot = {}
-    aa = ['A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y']
+    aa = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
     for i in range(len(aa)):
-        one_hot[aa[i]] = [0]*20
-        one_hot[aa[i]][i] = 1 
+        one_hot[aa[i]] = [0] * 20
+        one_hot[aa[i]][i] = 1
     for i in range(len(seq_list)):
         feat = []
         for j in range(len(seq_list[i])):
             feat.append(one_hot[seq_list[i][j]])
-        feat = feat + [[0]*20]*(padding-len(seq_list[i]))
-        feat_list.append(feat)   
-    return(np.array(feat_list))
+        feat = feat + [[0] * 20] * (padding - len(seq_list[i]))
+        feat_list.append(feat)
+    return (np.array(feat_list))
 
 
 def build_amplify():
@@ -59,10 +59,11 @@ def build_amplify():
     """
     inputs = Input(shape=(MAX_LEN, 20), name='Input')
     masking = Masking(mask_value=0.0, input_shape=(MAX_LEN, 20), name='Masking')(inputs)
-    hidden = Bidirectional(LSTM(512, use_bias=True, dropout=0.5, return_sequences=True), name='Bidirectional-LSTM')(masking)
-    hidden = MultiHeadAttention(head_num=32, activation='relu', use_bias=True, 
+    hidden = Bidirectional(LSTM(512, use_bias=True, dropout=0.5, return_sequences=True), name='Bidirectional-LSTM')(
+        masking)
+    hidden = MultiHeadAttention(head_num=32, activation='relu', use_bias=True,
                                 return_multi_attention=False, name='Multi-Head-Attention')(hidden)
-    hidden = Dropout(0.2, name = 'Dropout_1')(hidden)
+    hidden = Dropout(0.2, name='Dropout_1')(hidden)
     hidden = Attention(name='Attention')(hidden)
     prediction = Dense(1, activation='sigmoid', name='Output')(hidden)
     model = Model(inputs=inputs, outputs=prediction)
@@ -75,10 +76,11 @@ def build_attention():
     """
     inputs = Input(shape=(MAX_LEN, 100), name='Input')
     masking = Masking(mask_value=0.0, input_shape=(MAX_LEN, 100), name='Masking')(inputs)
-    hidden = Bidirectional(LSTM(512, use_bias=True, dropout=0.5, return_sequences=True), name='Bidirectional-LSTM')(masking)
-    hidden = MultiHeadAttention(head_num=32, activation='relu', use_bias=True, 
+    hidden = Bidirectional(LSTM(512, use_bias=True, dropout=0.5, return_sequences=True), name='Bidirectional-LSTM')(
+        masking)
+    hidden = MultiHeadAttention(head_num=32, activation='relu', use_bias=True,
                                 return_multi_attention=False, name='Multi-Head-Attention')(hidden)
-    hidden = Dropout(0.2, name = 'Dropout_1')(hidden)
+    hidden = Dropout(0.2, name='Dropout_1')(hidden)
     hidden = Attention(return_attention=True, name='Attention')(hidden)
     model = Model(inputs=inputs, outputs=hidden)
     return model
@@ -98,14 +100,21 @@ def load_multi_model(model_dir_list, architecture):
     return model_list
 
 
-def ensemble(model_list, X):
+def ensemble(model_list, X, batch_size=256):
     """
-    Ensemble the list of models with processed input X, 
-    Return results for ensemble and individual models
+    Ensemble the list of models with processed input X,
+    Return results for ensemble and individual models.
+    Processes input in batches to avoid GPU OOM on large datasets.
     """
-    indv_pred = [] # list of predictions from each individual model
+    indv_pred = []
+    n_samples = X.shape[0]
     for i in range(len(model_list)):
-        indv_pred.append(model_list[i].predict(X, batch_size=256, verbose=1).flatten())
+        preds = []
+        for start in range(0, n_samples, batch_size):
+            batch = X[start:start + batch_size]
+            preds.append(model_list[i].predict(batch, batch_size=batch_size, verbose=0).flatten())
+        indv_pred.append(np.concatenate(preds))
+        print(f"  Model {i + 1}/{len(model_list)} done ({n_samples} samples)")
     ens_pred = np.mean(np.array(indv_pred), axis=0)
     return ens_pred, np.array(indv_pred)
 
@@ -113,15 +122,15 @@ def ensemble(model_list, X):
 def get_attention_scores(indv_pred_list, attention_model_list, seq_list, X):
     """
     Get attention scores of the most confident model with processed input X.
-    Input: 
+    Input:
         inv_pred_list - list of predictions from individual models
         attention_model_list - list of attention models
         seq_list - list of peptide sequences
         X - processed input of the model
-    Output: 
+    Output:
         attention scores for all sequences from the most confident model
     """
-    #X = one_hot_padding(seq_list, MAX_LEN)
+    # X = one_hot_padding(seq_list, MAX_LEN)
     # calculate all attention scores
     attention_scores_list = []
     for i in range(len(attention_model_list)):
@@ -135,9 +144,11 @@ def get_attention_scores(indv_pred_list, attention_model_list, seq_list, X):
     confident_attention = []
     for i in range(len(ens_pred)):
         if ens_pred[i] > 0.5:
-            confident_attention.append(attention_scores_list[list(indv_pred_list[:,i]).index(max(indv_pred_list[:,i]))][i])
+            confident_attention.append(
+                attention_scores_list[list(indv_pred_list[:, i]).index(max(indv_pred_list[:, i]))][i])
         else:
-            confident_attention.append(attention_scores_list[list(indv_pred_list[:,i]).index(min(indv_pred_list[:,i]))][i])
+            confident_attention.append(
+                attention_scores_list[list(indv_pred_list[:, i]).index(min(indv_pred_list[:, i]))][i])
     return confident_attention
 
 
@@ -150,7 +161,7 @@ def proba_to_class_name(scores):
         """
     classes = []
     for i in range(len(scores)):
-        if scores[i]>0.5:
+        if scores[i] > 0.5:
             classes.append('AMP')
         else:
             classes.append('non-AMP')
@@ -188,10 +199,10 @@ def main():
         os.makedirs(dir_path)
     print(f"made dir {dir_path}")
 
-    model_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))+'/models/'
+    model_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + '/models/'
     models = [model_dir + args.model + '/AMPlify_' + args.model + '_model_weights_' \
-              + str(i+1) + '.h5' for i in range(5)]
-    print('\nLoading %s models...'%args.model)
+              + str(i + 1) + '.h5' for i in range(5)]
+    print('\nLoading %s models...' % args.model)
     for n in range(5):
         print(models[n])
     # load models for final output
@@ -201,9 +212,9 @@ def main():
         att_model = load_multi_model(models, build_attention)
 
     # read input sequences
-    aa = ['A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y']
-    seq_id = [] # peptide IDs
-    peptide = [] # peptide sequences
+    aa = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
+    seq_id = []  # peptide IDs
+    peptide = []  # peptide sequences
     for seq_record in SeqIO.parse(args.seqs, 'fasta'):
         seq_id.append(str(seq_record.id))
         peptide.append(str(seq_record.seq))
@@ -211,7 +222,7 @@ def main():
     # look for indices of valid sequences
     valid_ix = []
     for i in range(len(peptide)):
-        if len(peptide[i]) <= 200 and len(peptide[i]) >= 2 and set(peptide[i])-set(aa) == set():
+        if len(peptide[i]) <= 200 and len(peptide[i]) >= 2 and set(peptide[i]) - set(aa) == set():
             valid_ix.append(i)
 
     # select valid sequences for prediction
@@ -222,11 +233,11 @@ def main():
 
     # ensemble results for the 5 models
     print('\nPredicting...')
-    y_score_valid, y_indv_list_valid = ensemble(out_model, X_seq_valid)
+    y_score_valid, y_indv_list_valid = ensemble(out_model, X_seq_valid, batch_size=256)
     y_class_valid = proba_to_class_name(y_score_valid)
     y_score = []
     y_indv_list = [[] for n in range(5)]
-    y_log_score = [] # -10*log10(1-y_score)
+    y_log_score = []  # -10*log10(1-y_score)
     y_class = []
     y_length = []
     y_charge = []
@@ -242,12 +253,13 @@ def main():
         if i in valid_ix:
             y_score.append(str(round(y_score_valid[ix], 8)))
             if y_score_valid[ix] < 0.99999999:
-                y_log_score.append(str(round(-10*np.log10(1-y_score_valid[ix]), 4)))
+                y_log_score.append(str(round(-10 * np.log10(1 - y_score_valid[ix]), 4)))
             else:
-                y_log_score.append(str(round(-10*np.log10(1-0.99999999), 4)))
+                y_log_score.append(str(round(-10 * np.log10(1 - 0.99999999), 4)))
             y_class.append(y_class_valid[ix])
             y_length.append(len(peptide[i]))
-            y_charge.append(peptide[i].count('K') + peptide[i].count('R') - peptide[i].count('D') - peptide[i].count('E'))
+            y_charge.append(
+                peptide[i].count('K') + peptide[i].count('R') - peptide[i].count('D') - peptide[i].count('E'))
             if args.sub_model == 'on':
                 for n in range(5):
                     y_indv_list[n].append(str(round(y_indv_list_valid[n][ix], 8)))
@@ -269,17 +281,17 @@ def main():
     # output the predictions
     out_txt = ''
     for i in range(len(seq_id)):
-        temp_txt = 'Sequence ID: '+seq_id[i]+'\n'+'Sequence: '+peptide[i]+'\n' \
-                   +'Length: '+str(y_length[i])+'\n'+'Charge: '+str(y_charge[i])+'\n'
+        temp_txt = 'Sequence ID: ' + seq_id[i] + '\n' + 'Sequence: ' + peptide[i] + '\n' \
+                   + 'Length: ' + str(y_length[i]) + '\n' + 'Charge: ' + str(y_charge[i]) + '\n'
         if args.sub_model == 'on':
-            temp_txt = temp_txt+'Sub-model probability scores: ' \
+            temp_txt = temp_txt + 'Sub-model probability scores: ' \
                        + ', '.join([y_indv_list[n][i] for n in range(5)]) + '\n'
-        temp_txt = temp_txt+'Probability score: '+y_score[i]+'\n' \
-                   +'AMPlify_log_scaled_score: '+y_log_score[i]+'\n'+'Prediction: ' \
-                   +y_class[i]+'\n'
+        temp_txt = temp_txt + 'Probability score: ' + y_score[i] + '\n' \
+                   + 'AMPlify_log_scaled_score: ' + y_log_score[i] + '\n' + 'Prediction: ' \
+                   + y_class[i] + '\n'
         if args.attention == 'on':
-            temp_txt = temp_txt+'Attention: '+str(attention[i])+'\n'
-        temp_txt = temp_txt+'\n'
+            temp_txt = temp_txt + 'Attention: ' + str(attention[i]) + '\n'
+        temp_txt = temp_txt + '\n'
         # print(temp_txt)
         out_txt = out_txt + temp_txt
 
@@ -300,21 +312,21 @@ def main():
             # if os.path.isfile(out_name):
             #     print('\nUnable to save! File already existed!')
             # else:
-                out = pd.DataFrame({'Sequence_ID':seq_id,
-                                    'Sequence': peptide,
-                                    'Length': y_length,
-                                    'Charge': y_charge,
-                                    'Probability_score': y_score,
-                                    'AMPlify_log_scaled_score': y_log_score,
-                                    'Prediction': y_class})
-                if args.sub_model == 'on':
-                    for n in range(5):
-                        out.insert(loc = n+4, column = 'Sub_model_%d_probability_score'%(n+1), value = y_indv_list[n])
-                if args.attention == 'on':
-                    out.insert(loc = len(out.columns), column = 'Attention', value = attention)
-                out.to_csv(out_name, sep='\t', index=False)
-                print('\nResults saved as: ' + out_name)
-            
+            out = pd.DataFrame({'Sequence_ID': seq_id,
+                                'Sequence': peptide,
+                                'Length': y_length,
+                                'Charge': y_charge,
+                                'Probability_score': y_score,
+                                'AMPlify_log_scaled_score': y_log_score,
+                                'Prediction': y_class})
+            if args.sub_model == 'on':
+                for n in range(5):
+                    out.insert(loc=n + 4, column='Sub_model_%d_probability_score' % (n + 1), value=y_indv_list[n])
+            if args.attention == 'on':
+                out.insert(loc=len(out.columns), column='Attention', value=attention)
+            out.to_csv(out_name, sep='\t', index=False)
+            print('\nResults saved as: ' + out_name)
+
 
 if __name__ == "__main__":
     main()
