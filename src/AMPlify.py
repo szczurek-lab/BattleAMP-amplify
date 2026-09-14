@@ -59,7 +59,7 @@ def build_amplify():
     """
     inputs = Input(shape=(MAX_LEN, 20), name='Input')
     masking = Masking(mask_value=0.0, input_shape=(MAX_LEN, 20), name='Masking')(inputs)
-    hidden = Bidirectional(LSTM(512, use_bias=True, dropout=0.5, return_sequences=True), name='Bidirectional-LSTM')(
+    hidden = Bidirectional(LSTM(512, use_bias=True, dropout=0.5, return_sequences=True, use_cudnn=False), name='Bidirectional-LSTM')(
         masking)
     hidden = MultiHeadAttention(head_num=32, activation='relu', use_bias=True,
                                 return_multi_attention=False, name='Multi-Head-Attention')(hidden)
@@ -76,7 +76,7 @@ def build_attention():
     """
     inputs = Input(shape=(MAX_LEN, 100), name='Input')
     masking = Masking(mask_value=0.0, input_shape=(MAX_LEN, 100), name='Masking')(inputs)
-    hidden = Bidirectional(LSTM(512, use_bias=True, dropout=0.5, return_sequences=True), name='Bidirectional-LSTM')(
+    hidden = Bidirectional(LSTM(512, use_bias=True, dropout=0.5, return_sequences=True, use_cudnn=False), name='Bidirectional-LSTM')(
         masking)
     hidden = MultiHeadAttention(head_num=32, activation='relu', use_bias=True,
                                 return_multi_attention=False, name='Multi-Head-Attention')(hidden)
